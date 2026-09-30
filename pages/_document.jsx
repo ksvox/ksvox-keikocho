@@ -12,6 +12,8 @@ export default function Document() {
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="稽古帳" />
         <meta name="theme-color" content="#FFFFFF" />
+        {/* 検索エンジンに登録させない */}
+        <meta name="robots" content="noindex, nofollow, noarchive" />
       </Head>
       <body>
         <Main />
