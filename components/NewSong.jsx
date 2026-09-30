@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { collection, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { ArrowLeft, Camera, FileText, Image as ImageIcon, Plus, Save, ScanText, X } from 'lucide-react';
 import { quiet, todayStr } from '../lib/utils';
-import { fileToPayload, scanLyrics } from '../lib/ai';
+import { fileToPayload, runMarksAnalysis, scanLyrics } from '../lib/ai';
 import { DEFAULT_LAYOUT } from './InkSheet';
 
 export default function NewSong({ db, student, lessonId, onBack, onDone }) {
@@ -55,16 +55,21 @@ export default function NewSong({ db, student, lessonId, onBack, onDone }) {
     const songRef = doc(collection(db, 'students', sid, 'songs'));
     const t = title.trim();
 
+    const cleanLyrics = lyrics.replace(/\r\n/g, '\n').trim();
     quiet(
       setDoc(songRef, {
         title: t,
-        lyrics: lyrics.replace(/\r\n/g, '\n').trim(),
+        lyrics: cleanLyrics,
         startedAt: today,
         finishedAt: null,
         layout: DEFAULT_LAYOUT,
+        marks: [],
+        marksStatus: 'pending',
         createdAt: serverTimestamp(),
       })
     );
+    // 保存と同時に、裏側で注意マークを分析しておく(ネットがなければ後で自動)
+    runMarksAnalysis(db, sid, songRef.id, cleanLyrics);
     if (student.currentSongId) {
       quiet(updateDoc(doc(db, 'students', sid, 'songs', student.currentSongId), { switchedAt: today }));
     }

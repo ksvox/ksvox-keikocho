@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { loadFirebaseConfig, initFirebase } from '../lib/firebase';
 import { DEFAULT_SETTINGS } from '../lib/defaults';
 import { quiet } from '../lib/utils';
+import { processPendingAudio } from '../lib/ai';
 import { useCollectionData, useOnline } from '../lib/useFirestore';
 import Login from './Login';
 import Roster from './Roster';
@@ -79,6 +80,21 @@ function Main({ db, auth, user }) {
   }, [db]);
 
   const students = useCollectionData(collection(db, 'students'), [db]);
+
+  // iPadに保存された録音を、ネットにつながった時に自動でまとめる
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  useEffect(() => {
+    if (!settings) return undefined;
+    const run = () => processPendingAudio(db, settingsRef.current);
+    run();
+    window.addEventListener('online', run);
+    const timer = setInterval(run, 60 * 1000);
+    return () => {
+      window.removeEventListener('online', run);
+      clearInterval(timer);
+    };
+  }, [db, !!settings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!settings || students === undefined) return <div className="center-screen muted">記録を読み込み中…</div>;
 

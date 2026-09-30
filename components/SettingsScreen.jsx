@@ -3,6 +3,7 @@ import { collection, deleteDoc, doc, getDocs, setDoc, updateDoc } from 'firebase
 import { sendPasswordResetEmail, signOut } from 'firebase/auth';
 import { ArrowDown, ArrowLeft, ArrowUp, LogOut, Plus, Trash2 } from 'lucide-react';
 import { newId, quiet } from '../lib/utils';
+import { DEFAULT_SUMMARY_PROMPT } from '../lib/defaults';
 
 // 入力中は画面を書き換えず、入力欄から離れた時に保存する欄
 function EditText({ value, onSave, placeholder, style }) {
@@ -26,6 +27,28 @@ function EditText({ value, onSave, placeholder, style }) {
         if (t && t !== value) onSave(t);
         else setV(value || '');
       }}
+    />
+  );
+}
+
+function PromptEditor({ value, onSave }) {
+  const [v, setV] = useState(value || '');
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setV(value || '');
+  }, [value]);
+  return (
+    <textarea
+      value={v}
+      onFocus={() => {
+        focused.current = true;
+      }}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={() => {
+        focused.current = false;
+        if (v.trim() && v !== value) onSave(v);
+      }}
+      style={{ width: '100%', minHeight: 260, lineHeight: 1.7, fontSize: 16 }}
     />
   );
 }
@@ -203,6 +226,26 @@ export default function SettingsScreen({ db, auth, user, settings, students, onB
             ))}
             <button className="dashed-btn" onClick={() => save({ readingTasks: [...tasks, '新しい課題'] })}>
               <Plus size={16} style={{ verticalAlign: 'middle' }} /> 課題を追加
+            </button>
+          </div>
+        </section>
+
+        {/* AI要点メモへの指示文 */}
+        <section className="settings-section">
+          <h2>振り返り録音のまとめ方(AIへの指示文)</h2>
+          <div className="card">
+            <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>
+              ルーティン名と朗読課題の題名は、この指示文とは別に自動でAIへ伝えます。入力欄の外をタップすると保存されます。
+            </p>
+            <PromptEditor
+              value={settings.summaryPrompt || DEFAULT_SUMMARY_PROMPT}
+              onSave={(v) => save({ summaryPrompt: v })}
+            />
+            <button
+              className="link-btn"
+              onClick={() => window.confirm('指示文を最初の内容に戻しますか?') && save({ summaryPrompt: DEFAULT_SUMMARY_PROMPT })}
+            >
+              最初の内容に戻す
             </button>
           </div>
         </section>

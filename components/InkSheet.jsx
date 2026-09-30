@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { layoutMarks, markStyle } from '../lib/marks';
 
 // 歌詞シートの論理的な横幅。どのiPadでも同じ位置で折り返すよう、
 // この幅で組んだものを画面幅に合わせて拡大縮小する。
@@ -101,6 +102,8 @@ export default function InkSheet({
   readOnly = false,
   textStyle,
   zoom = 1,
+  marks = null,
+  showMarks = false,
 }) {
   const outerRef = useRef(null);
   const textRef = useRef(null);
@@ -266,6 +269,32 @@ export default function InkSheet({
     };
   }, [readOnly]);
 
+  // 注意マーク付きの歌詞(下線と背景色だけなので、文字の位置は変わらない)
+  const rendered = useMemo(() => {
+    if (!showMarks || !marks || !marks.length || !text) return text;
+    const { lines, perLine } = layoutMarks(text, marks);
+    return lines.map((line, li) => {
+      const parts = [];
+      let pos = 0;
+      perLine[li].forEach((r) => {
+        if (r.start > pos) parts.push(line.slice(pos, r.start));
+        parts.push(
+          <span key={`${li}-${r.start}`} style={markStyle(r.type)}>
+            {line.slice(r.start, r.end)}
+          </span>
+        );
+        pos = r.end;
+      });
+      if (pos < line.length) parts.push(line.slice(pos));
+      return (
+        <span key={li}>
+          {parts}
+          {li < lines.length - 1 ? '\n' : ''}
+        </span>
+      );
+    });
+  }, [text, marks, showMarks]);
+
   const cssW = SHEET_W;
   return (
     <div ref={outerRef} className="sheet-wrap">
@@ -276,7 +305,7 @@ export default function InkSheet({
         <div className="sheet-inner" style={{ width: cssW, height, transform: `scale(${scale})` }}>
           {text ? (
             <div ref={textRef} className="sheet-text" style={textStyle}>
-              {text}
+              {rendered}
             </div>
           ) : (
             emptyText && <div className="sheet-empty">{emptyText}</div>

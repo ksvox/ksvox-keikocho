@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { collection, deleteDoc, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import {
-  ArrowLeft, Check, ChevronDown, ChevronUp, Eraser, FileText, Hand, Highlighter, Pencil, PenLine, Trash2, Undo2,
+  ArrowLeft, Check, ChevronDown, ChevronUp, Eraser, FileText, Hand, Highlighter, History, Pencil, PenLine, Trash2, Undo2,
 } from 'lucide-react';
 import InkSheet, { DEFAULT_LAYOUT, PEN_COLORS, ZOOM_LEVELS } from './InkSheet';
 import Modal from './Modal';
-import { useCollectionData, useDocData } from '../lib/useFirestore';
-import { formatDate, quiet } from '../lib/utils';
+import Recorder from './Recorder';
+import { MarkLegend, MarksPanel, PrevReviewModal, SummaryEditor, SummaryView } from './ReviewParts';
+import { useCollectionData, useDocData, useOnline } from '../lib/useFirestore';
+import { formatDate, newId, quiet } from '../lib/utils';
+import { processPendingAudio, runMarksAnalysis } from '../lib/ai';
+import { addPending, listPending } from '../lib/pendingAudio';
 
 const SAVE_DELAY = 800;
 
@@ -64,6 +68,13 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
   const [panelOpen, setPanelOpen] = useState(true);
   const [tab, setTab] = useState('routine');
   const [editingLyrics, setEditingLyrics] = useState(false);
+  const online = useOnline();
+  const [showMarks, setShowMarks] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [showPrev, setShowPrev] = useState(false);
+  const [editingSummary, setEditingSummary] = useState(false);
+  const [pendingRecs, setPendingRecs] = useState([]);
+  const [summarizing, setSummarizing] = useState(false);
   const [zoom, setZoom] = useState(() => {
     try {
       const z = Number(localStorage.getItem('keikocho-zoom'));
@@ -133,6 +144,55 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
         .sort((a, b) => (a.date < b.date ? 1 : -1))[0] || null
     );
   }, [lessons, lesson, lessonId]);
+
+  // 注意マーク: まだ分析していない曲は、ネットにつながっていれば自動で分析する
+  const marksTried = useRef('');
+  useEffect(() => {
+    if (!song || !online) return;
+    if (song.marksStatus === 'done' || song.marksStatus === 'error') return;
+    if (marksTried.current === song.id) return;
+    marksTried.current = song.id;
+    setAnalyzing(true);
+    runMarksAnalysis(db, sid, song.id, song.lyrics || '').finally(() => setAnalyzing(false));
+  }, [song, online, db, sid]);
+
+  const retryMarks = () => {
+    if (!song) return;
+    setAnalyzing(true);
+    runMarksAnalysis(db, sid, song.id, song.lyrics || '').finally(() => setAnalyzing(false));
+  };
+
+  // この日の、まとめ待ちの録音
+  useEffect(() => {
+    let alive = true;
+    const refresh = () =>
+      listPending().then((list) => alive && setPendingRecs(list.filter((r) => r.lessonId === lessonId)));
+    refresh();
+    window.addEventListener('keikocho-pending-changed', refresh);
+    return () => {
+      alive = false;
+      window.removeEventListener('keikocho-pending-changed', refresh);
+    };
+  }, [lessonId]);
+
+  const summarizeNow = async () => {
+    setSummarizing(true);
+    try {
+      await processPendingAudio(db, settings, { force: true, lessonId });
+    } finally {
+      setSummarizing(false);
+    }
+  };
+
+  const onRecorded = async (blob, mimeType) => {
+    try {
+      await addPending({ id: newId('a'), studentId: sid, lessonId, mimeType, blob, createdAt: Date.now(), attempts: 0 });
+    } catch (e) {
+      window.alert('録音をiPadに保存できませんでした。');
+      return;
+    }
+    if (navigator.onLine) summarizeNow();
+  };
 
   if (lesson === undefined) return <div className="center-screen muted">読み込み中…</div>;
   if (lesson === null) {
@@ -212,6 +272,15 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
             {student.name}・{formatDate(lesson.date)}
           </div>
           <div className="song">{song ? song.title : '課題曲なし'}</div>
+          {prevLesson && !lesson.prevReviewed && (
+            <button
+              className="btn outline"
+              onClick={() => setShowPrev(true)}
+              style={{ minHeight: 34, padding: '4px 12px', fontSize: 14, marginTop: 4 }}
+            >
+              <History size={16} /> 前回の振り返り
+            </button>
+          )}
         </div>
         <button className="icon-btn" onClick={deleteLesson} aria-label="この記録を削除" style={{ color: 'var(--red)' }}>
           <Trash2 size={20} />
@@ -282,6 +351,15 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
           </button>
         </div>
         <div className="tools">
+          {song && (
+            <button
+              className={`btn ${showMarks ? 'primary' : 'outline'}`}
+              onClick={() => setShowMarks(!showMarks)}
+              style={{ minHeight: 42, padding: '6px 12px', fontSize: 15 }}
+            >
+              注意マーク
+            </button>
+          )}
           <div className="zoom">
             <button onClick={() => changeZoom(-1)} disabled={zoom === ZOOM_LEVELS[0]} aria-label="縮小">−</button>
             <span>{Math.round(zoom * 100)}%</span>
@@ -305,9 +383,21 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
         ) : !inkReady ? (
           <div className="center-screen muted">書き込みを読み込み中…</div>
         ) : (
+          <>
+          {showMarks && (
+            song.marksStatus === 'done' ? (
+              <MarkLegend marks={song.marks} />
+            ) : (
+              <p className="review-note" style={{ margin: '0 4px 10px' }}>
+                {analyzing || online ? '注意マークを分析しています…' : 'ネットにつながった時に、自動で注意マークを分析します。'}
+              </p>
+            )
+          )}
           <InkSheet
             text={song.lyrics || ''}
             textStyle={song.layout || DEFAULT_LAYOUT}
+            marks={song.marks || []}
+            showMarks={showMarks}
             zoom={zoom}
             pastLayers={pastLayers}
             pastAlpha={viewMode === 'all' ? 0.4 : 0}
@@ -320,6 +410,7 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
             tool={tool}
             fingerMode={fingerMode}
           />
+          </>
         )}
       </div>
 
@@ -328,6 +419,7 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
           {[
             ['routine', 'ルーティン'],
             ['review', '振り返り'],
+            ['marks', '注意マーク'],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -386,10 +478,50 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
                   </section>
                 ))}
               </div>
+            ) : tab === 'marks' ? (
+              <MarksPanel
+                song={song}
+                online={online}
+                analyzing={analyzing}
+                onRetry={() => window.confirm('注意マークを付け直しますか?(今のマークは置き換わります)') && retryMarks()}
+                onDelete={(i) =>
+                  quiet(updateDoc(doc(db, 'students', sid, 'songs', song.id), { marks: (song.marks || []).filter((_, k) => k !== i) }))
+                }
+              />
             ) : (
               <div>
-                <p className="review-note">録音とAIによる要点まとめは、次の段階で追加します。</p>
-                <p className="pad-title">今日の気付き(手書き)</p>
+                <Recorder
+                  onRecorded={onRecorded}
+                  disabled={summarizing}
+                  label={lesson.summary ? '振り返りを録音し直す' : '振り返りを録音'}
+                />
+                {(summarizing || pendingRecs.length > 0) && (
+                  <div className="card" style={{ padding: 14, margin: '12px 0', fontSize: 15 }}>
+                    {summarizing ? (
+                      '要点をまとめています…(30秒〜1分ほど)'
+                    ) : online ? (
+                      <>
+                        まとめ待ちの録音があります。
+                        {lesson.summaryError && <span className="error-text"> ({lesson.summaryError})</span>}
+                        <button className="link-btn" onClick={summarizeNow}>今すぐまとめる</button>
+                      </>
+                    ) : (
+                      '録音をiPadに保存しました。ネットにつながった時に、自動で要点をまとめます。'
+                    )}
+                  </div>
+                )}
+                {lesson.summary && (
+                  <div className="card" style={{ padding: 16, margin: '12px 0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <strong style={{ color: 'var(--indigo)' }}>AIの要点メモ</strong>
+                      <button className="link-btn" onClick={() => setEditingSummary(true)}>
+                        <Pencil size={16} style={{ verticalAlign: 'middle' }} /> 手直し
+                      </button>
+                    </div>
+                    <SummaryView summary={lesson.summary} />
+                  </div>
+                )}
+                <p className="pad-title" style={{ marginTop: 16 }}>今日の気付き(手書き)</p>
                 {insight === null ? (
                   <div className="muted">読み込み中…</div>
                 ) : (
@@ -413,12 +545,42 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
         )}
       </div>
 
+      {showPrev && prevLesson && (
+        <PrevReviewModal
+          prevLesson={prevLesson}
+          settings={settings}
+          onClose={() => setShowPrev(false)}
+          onConfirm={() => {
+            quiet(updateDoc(lessonRef, { prevReviewed: true }));
+            setShowPrev(false);
+          }}
+        />
+      )}
+
+      {editingSummary && (
+        <SummaryEditor
+          summary={lesson.summary}
+          onClose={() => setEditingSummary(false)}
+          onSave={(summary) => {
+            quiet(updateDoc(lessonRef, { summary }));
+            setEditingSummary(false);
+          }}
+        />
+      )}
+
       {editingLyrics && song && (
         <LyricsEditor
           song={song}
           onClose={() => setEditingLyrics(false)}
           onSave={(title, lyrics) => {
-            quiet(updateDoc(doc(db, 'students', sid, 'songs', song.id), { title, lyrics }));
+            const changed = (song.lyrics || '') !== lyrics;
+            quiet(
+              updateDoc(
+                doc(db, 'students', sid, 'songs', song.id),
+                changed ? { title, lyrics, marks: [], marksStatus: 'pending' } : { title }
+              )
+            );
+            if (changed) marksTried.current = '';
             if (lesson.songTitle !== title) quiet(updateDoc(lessonRef, { songTitle: title }));
             setEditingLyrics(false);
           }}
