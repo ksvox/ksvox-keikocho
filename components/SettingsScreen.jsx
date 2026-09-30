@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { doc, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { sendPasswordResetEmail, signOut } from 'firebase/auth';
 import { ArrowDown, ArrowLeft, ArrowUp, LogOut, Plus, Trash2 } from 'lucide-react';
 import { newId, quiet } from '../lib/utils';
@@ -36,6 +36,19 @@ function move(list, i, dir) {
   const next = list.slice();
   [next[i], next[j]] = [next[j], next[i]];
   return next;
+}
+
+// 生徒と、その生徒のすべての記録(お稽古・課題曲・書き込み)を削除する
+async function deleteStudentCompletely(db, sid) {
+  const songs = await getDocs(collection(db, 'students', sid, 'songs'));
+  for (const s of songs.docs) {
+    const ink = await getDocs(collection(db, 'students', sid, 'songs', s.id, 'ink'));
+    ink.docs.forEach((d) => quiet(deleteDoc(d.ref)));
+    quiet(deleteDoc(s.ref));
+  }
+  const lessons = await getDocs(collection(db, 'students', sid, 'lessons'));
+  lessons.docs.forEach((d) => quiet(deleteDoc(d.ref)));
+  quiet(deleteDoc(doc(db, 'students', sid)));
 }
 
 export default function SettingsScreen({ db, auth, user, settings, students, onBack }) {
@@ -205,9 +218,25 @@ export default function SettingsScreen({ db, auth, user, settings, students, onB
                     {s.name}
                     <span className="muted" style={{ fontSize: 14, marginLeft: 8 }}>{s.className}</span>
                   </span>
-                  <button className="btn outline" onClick={() => quiet(updateDoc(doc(db, 'students', s.id), { archived: false }))}>
-                    名簿に戻す
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    <button className="btn outline" onClick={() => quiet(updateDoc(doc(db, 'students', s.id), { archived: false }))}>
+                      名簿に戻す
+                    </button>
+                    <button
+                      className="btn danger"
+                      onClick={async () => {
+                        if (!window.confirm(`${s.name}さんを完全に削除しますか?\nお稽古の記録・課題曲・書き込みがすべて消え、元に戻せません。`)) return;
+                        if (!window.confirm('本当に削除してよろしいですか?(最終確認)')) return;
+                        try {
+                          await deleteStudentCompletely(db, s.id);
+                        } catch (e) {
+                          window.alert('削除できませんでした。ネット接続を確認して、もう一度お試しください。');
+                        }
+                      }}
+                    >
+                      <Trash2 size={18} /> 完全に削除
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

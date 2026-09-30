@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { collection, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import {
-  ArrowLeft, Check, ChevronDown, ChevronUp, Eraser, FileText, Hand, Highlighter, Pencil, PenLine, Undo2,
+  ArrowLeft, Check, ChevronDown, ChevronUp, Eraser, FileText, Hand, Highlighter, Pencil, PenLine, Trash2, Undo2,
 } from 'lucide-react';
 import InkSheet, { DEFAULT_LAYOUT, PEN_COLORS, ZOOM_LEVELS } from './InkSheet';
 import Modal from './Modal';
@@ -174,6 +174,30 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
     quiet(updateDoc(lessonRef, { finishedSong: true }));
   };
 
+  // この日の記録を削除(チェック・書き込み・今日の気付きをまとめて)
+  const deleteLesson = () => {
+    const msg = `${formatDate(lesson.date)}のお稽古の記録を削除しますか?\nルーティンのチェック、歌詞への書き込み、今日の気付きがすべて消え、元に戻せません。`;
+    if (!window.confirm(msg)) return;
+    if (song) {
+      const songRef = doc(db, 'students', sid, 'songs', song.id);
+      const others = (lessons || []).filter((l) => l.id !== lessonId && l.songId === song.id);
+      if (others.length === 0) {
+        // この曲を使ったお稽古がほかにない場合は、曲ごと片付ける
+        (inkDocs || []).forEach((d) => quiet(deleteDoc(doc(db, 'students', sid, 'songs', song.id, 'ink', d.id))));
+        quiet(deleteDoc(songRef));
+        if (student.currentSongId === song.id) quiet(updateDoc(doc(db, 'students', sid), { currentSongId: null }));
+      } else {
+        quiet(deleteDoc(doc(db, 'students', sid, 'songs', song.id, 'ink', lessonId)));
+        if (lesson.finishedSong) {
+          quiet(updateDoc(songRef, { finishedAt: null }));
+          if (!student.currentSongId) quiet(updateDoc(doc(db, 'students', sid), { currentSongId: song.id }));
+        }
+      }
+    }
+    quiet(deleteDoc(lessonRef));
+    onBack();
+  };
+
   const showFinishButton = song && (lesson.finishedSong || !song.finishedAt);
   const inkReady = !songId || (myInk !== null && inkDocs !== undefined);
 
@@ -189,6 +213,9 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
           </div>
           <div className="song">{song ? song.title : '課題曲なし'}</div>
         </div>
+        <button className="icon-btn" onClick={deleteLesson} aria-label="この記録を削除" style={{ color: 'var(--red)' }}>
+          <Trash2 size={20} />
+        </button>
         {song && (
           <button className="icon-btn" onClick={() => setEditingLyrics(true)} aria-label="歌詞を修正">
             <Pencil size={20} />
