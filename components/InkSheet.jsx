@@ -5,6 +5,11 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 export const SHEET_W = 720;
 
 export const PEN_COLORS = ['#C2485A', '#2F6FD0', '#2E8B57', '#1C2733'];
+// 歌詞の標準の文字サイズ・行間(新しく読み込む曲に保存され、その曲の中では固定)
+export const DEFAULT_LAYOUT = { fontSize: 19, lineHeight: 2.1 };
+export const ZOOM_LEVELS = [0.8, 1, 1.25, 1.5];
+// iPadのSafariで描画が消えないよう、キャンバスの画素数に上限を設ける
+const MAX_CANVAS_PIXELS = 12000000;
 export const HIGHLIGHT_COLOR = '#F2C230';
 
 // ---- 線データの圧縮(座標を10倍の整数にして文字列化) ----
@@ -95,6 +100,7 @@ export default function InkSheet({
   emptyText = '',
   readOnly = false,
   textStyle,
+  zoom = 1,
 }) {
   const outerRef = useRef(null);
   const textRef = useRef(null);
@@ -111,31 +117,32 @@ export default function InkSheet({
   useLayoutEffect(() => {
     const el = outerRef.current;
     if (!el) return undefined;
-    const update = () => setScale(el.clientWidth / SHEET_W || 1);
+    const update = () => setScale(((el.clientWidth || SHEET_W) / SHEET_W) * zoom);
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [zoom]);
 
   // 歌詞の長さに合わせた高さ
   useLayoutEffect(() => {
     const t = textRef.current;
     const th = t ? t.offsetHeight : 0;
     setHeight(Math.max(minHeight, text ? th + extraSpace : minHeight));
-  }, [text, minHeight, extraSpace, scale]);
+  }, [text, minHeight, extraSpace, scale, textStyle && textStyle.fontSize, textStyle && textStyle.lineHeight]);
 
   const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
 
   const prepCanvas = useCallback(
     (cv) => {
       if (!cv) return null;
-      const w = Math.round(SHEET_W * scale * dpr);
-      const h = Math.round(height * scale * dpr);
+      const r = Math.min(scale * dpr, Math.sqrt(MAX_CANVAS_PIXELS / (SHEET_W * height)));
+      const w = Math.round(SHEET_W * r);
+      const h = Math.round(height * r);
       if (cv.width !== w) cv.width = w;
       if (cv.height !== h) cv.height = h;
       const ctx = cv.getContext('2d');
-      ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+      ctx.setTransform(r, 0, 0, r, 0, 0);
       return ctx;
     },
     [scale, height, dpr]
@@ -261,29 +268,34 @@ export default function InkSheet({
 
   const cssW = SHEET_W;
   return (
-    <div ref={outerRef} className="sheet-outer" style={{ height: height * scale }}>
-      <div className="sheet-inner" style={{ width: cssW, height, transform: `scale(${scale})` }}>
-        {text ? (
-          <div ref={textRef} className="sheet-text" style={textStyle}>
-            {text}
-          </div>
-        ) : (
-          emptyText && <div className="sheet-empty">{emptyText}</div>
-        )}
-        <canvas ref={baseRef} className="sheet-canvas" style={{ width: cssW, height, pointerEvents: 'none' }} />
-        <canvas
-          ref={liveRef}
-          className={`sheet-canvas ${fingerMode && !readOnly ? 'finger' : 'pen-only'}`}
-          style={{ width: cssW, height }}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={finish}
-          onPointerCancel={finish}
-          onPointerLeave={(e) => {
-            if (erasing.current) erasing.current = false;
-            else if (drawing.current && e.pointerType === 'mouse') finish(e);
-          }}
-        />
+    <div ref={outerRef} className="sheet-wrap">
+      <div
+        className="sheet-outer"
+        style={{ width: SHEET_W * scale, height: height * scale, margin: zoom < 1 ? '0 auto' : 0 }}
+      >
+        <div className="sheet-inner" style={{ width: cssW, height, transform: `scale(${scale})` }}>
+          {text ? (
+            <div ref={textRef} className="sheet-text" style={textStyle}>
+              {text}
+            </div>
+          ) : (
+            emptyText && <div className="sheet-empty">{emptyText}</div>
+          )}
+          <canvas ref={baseRef} className="sheet-canvas" style={{ width: cssW, height, pointerEvents: 'none' }} />
+          <canvas
+            ref={liveRef}
+            className={`sheet-canvas ${fingerMode && !readOnly ? 'finger' : 'pen-only'}`}
+            style={{ width: cssW, height }}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={finish}
+            onPointerCancel={finish}
+            onPointerLeave={(e) => {
+              if (erasing.current) erasing.current = false;
+              else if (drawing.current && e.pointerType === 'mouse') finish(e);
+            }}
+          />
+        </div>
       </div>
     </div>
   );

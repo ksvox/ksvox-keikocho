@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { collection, doc } from 'firebase/firestore';
 import { ArrowLeft } from 'lucide-react';
-import InkSheet from './InkSheet';
+import InkSheet, { DEFAULT_LAYOUT } from './InkSheet';
 import { useCollectionData, useDocData } from '../lib/useFirestore';
 import { formatDate } from '../lib/utils';
 
@@ -40,7 +40,7 @@ export default function SongViewer({ db, student, songId, onBack }) {
         ) : !song ? (
           <p className="muted">この曲が見つかりませんでした。</p>
         ) : (
-          <InkSheet text={song.lyrics || ''} pastLayers={layers} pastAlpha={1} strokes={[]} readOnly />
+          <InkSheet text={song.lyrics || ''} textStyle={song.layout || DEFAULT_LAYOUT} pastLayers={layers} pastAlpha={1} strokes={[]} readOnly />
         )}
       </div>
     </div>

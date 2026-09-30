@@ -3,6 +3,7 @@ import { collection, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/fi
 import { ArrowLeft, Camera, FileText, Image as ImageIcon, Plus, Save, ScanText, X } from 'lucide-react';
 import { quiet, todayStr } from '../lib/utils';
 import { fileToPayload, scanLyrics } from '../lib/ai';
+import { DEFAULT_LAYOUT } from './InkSheet';
 
 export default function NewSong({ db, student, lessonId, onBack, onDone }) {
   const [step, setStep] = useState('choose'); // choose | images | text
@@ -60,6 +61,7 @@ export default function NewSong({ db, student, lessonId, onBack, onDone }) {
         lyrics: lyrics.replace(/\r\n/g, '\n').trim(),
         startedAt: today,
         finishedAt: null,
+        layout: DEFAULT_LAYOUT,
         createdAt: serverTimestamp(),
       })
     );

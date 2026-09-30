@@ -153,17 +153,21 @@ input:focus, select:focus, textarea:focus { border-color: var(--indigo); }
 .lyrics-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px; min-height: 0; }
 
 /* 歌詞シート(手書き) */
+.sheet-wrap { width: 100%; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
 .sheet-outer { position: relative; overflow: hidden; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; }
 .sheet-inner { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
 .sheet-text {
-  padding: 40px 48px 0; font-size: 26px; line-height: 2.5; letter-spacing: 0.03em;
+  padding: 32px 40px 0; font-size: 19px; line-height: 2.1; letter-spacing: 0.03em;
   white-space: pre-wrap; word-break: break-word; color: var(--ink);
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
 .sheet-canvas { position: absolute; top: 0; left: 0; }
-.sheet-canvas.pen-only { touch-action: pan-y; }
+.sheet-canvas.pen-only { touch-action: pan-x pan-y; }
 .sheet-canvas.finger { touch-action: none; }
-.sheet-empty { position: absolute; top: 40px; left: 48px; right: 48px; font-size: 18px; color: var(--sub); }
+.sheet-empty { position: absolute; top: 32px; left: 40px; right: 40px; font-size: 18px; color: var(--sub); }
+.zoom { display: inline-flex; align-items: center; gap: 4px; background: var(--ground); border-radius: 10px; padding: 3px; }
+.zoom button { width: 36px; height: 36px; border-radius: 8px; color: var(--indigo); font-size: 20px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.zoom span { min-width: 48px; text-align: center; font-size: 14px; color: var(--sub); }
 
 /* 下部パネル */
 .panel { background: var(--paper); border-top: 1px solid var(--line); display: flex; flex-direction: column; flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }

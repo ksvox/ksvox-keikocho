@@ -3,7 +3,7 @@ import { collection, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/fi
 import {
   ArrowLeft, Check, ChevronDown, ChevronUp, Eraser, FileText, Hand, Highlighter, Pencil, PenLine, Undo2,
 } from 'lucide-react';
-import InkSheet, { PEN_COLORS } from './InkSheet';
+import InkSheet, { DEFAULT_LAYOUT, PEN_COLORS, ZOOM_LEVELS } from './InkSheet';
 import Modal from './Modal';
 import { useCollectionData, useDocData } from '../lib/useFirestore';
 import { formatDate, quiet } from '../lib/utils';
@@ -64,6 +64,24 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
   const [panelOpen, setPanelOpen] = useState(true);
   const [tab, setTab] = useState('routine');
   const [editingLyrics, setEditingLyrics] = useState(false);
+  const [zoom, setZoom] = useState(() => {
+    try {
+      const z = Number(localStorage.getItem('keikocho-zoom'));
+      return ZOOM_LEVELS.includes(z) ? z : 1;
+    } catch (e) {
+      return 1;
+    }
+  });
+  const changeZoom = (dir) => {
+    const i = ZOOM_LEVELS.indexOf(zoom);
+    const next = ZOOM_LEVELS[Math.min(ZOOM_LEVELS.length - 1, Math.max(0, i + dir))];
+    setZoom(next);
+    try {
+      localStorage.setItem('keikocho-zoom', String(next));
+    } catch (e) {
+      /* noop */
+    }
+  };
 
   // 今回の書き込み(歌詞)
   // 先生が書き始めるまでは、保存済みの最新データ(iPad内→サーバー)を反映し続ける
@@ -236,9 +254,16 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
             <Hand size={20} />
           </button>
         </div>
-        <div className="seg">
-          <button className={viewMode === 'all' ? 'on' : ''} onClick={() => setViewMode('all')}>全日表示</button>
-          <button className={viewMode === 'today' ? 'on' : ''} onClick={() => setViewMode('today')}>この日のみ</button>
+        <div className="tools">
+          <div className="zoom">
+            <button onClick={() => changeZoom(-1)} disabled={zoom === ZOOM_LEVELS[0]} aria-label="縮小">−</button>
+            <span>{Math.round(zoom * 100)}%</span>
+            <button onClick={() => changeZoom(1)} disabled={zoom === ZOOM_LEVELS[ZOOM_LEVELS.length - 1]} aria-label="拡大">+</button>
+          </div>
+          <div className="seg">
+            <button className={viewMode === 'all' ? 'on' : ''} onClick={() => setViewMode('all')}>全日表示</button>
+            <button className={viewMode === 'today' ? 'on' : ''} onClick={() => setViewMode('today')}>この日のみ</button>
+          </div>
         </div>
       </div>
 
@@ -255,6 +280,8 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
         ) : (
           <InkSheet
             text={song.lyrics || ''}
+            textStyle={song.layout || DEFAULT_LAYOUT}
+            zoom={zoom}
             pastLayers={pastLayers}
             pastAlpha={viewMode === 'all' ? 0.4 : 0}
             strokes={myInk || []}
