@@ -9,7 +9,7 @@ import Recorder from './Recorder';
 import { MarkLegend, MarksPanel, PrevReviewModal, SummaryEditor, SummaryView } from './ReviewParts';
 import { useCollectionData, useDocData, useOnline } from '../lib/useFirestore';
 import { formatDate, newId, quiet } from '../lib/utils';
-import { processPendingAudio, runMarksAnalysis } from '../lib/ai';
+import { processPendingAudio, runMarksAnalysis, runTranslation } from '../lib/ai';
 import { addPending, listPending } from '../lib/pendingAudio';
 
 const SAVE_DELAY = 800;
@@ -72,6 +72,9 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
   const [showMarks, setShowMarks] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [showPrev, setShowPrev] = useState(false);
+  const [showTr, setShowTr] = useState(false);
+  const [trBusy, setTrBusy] = useState(false);
+  const [trError, setTrError] = useState('');
   const [editingSummary, setEditingSummary] = useState(false);
   const [pendingRecs, setPendingRecs] = useState([]);
   const [summarizing, setSummarizing] = useState(false);
@@ -155,6 +158,18 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
     setAnalyzing(true);
     runMarksAnalysis(db, sid, song.id, song.lyrics || '').finally(() => setAnalyzing(false));
   }, [song, online, db, sid]);
+
+  // 日本語訳を開く。まだ訳がない曲は、ネットにつながっていればその場で作る
+  const openTranslation = () => {
+    setShowTr(true);
+    setTrError('');
+    if (!song || song.translationStatus === 'done' || trBusy || analyzing) return;
+    if (!navigator.onLine) return;
+    setTrBusy(true);
+    runTranslation(db, sid, song.id, song.lyrics || '')
+      .catch((e) => setTrError(e.message || '作成できませんでした'))
+      .finally(() => setTrBusy(false));
+  };
 
   const retryMarks = () => {
     if (!song) return;
@@ -360,6 +375,11 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
               注意マーク
             </button>
           )}
+          {song && (
+            <button className="btn outline" onClick={openTranslation} style={{ minHeight: 42, padding: '6px 12px', fontSize: 15 }}>
+              日本語訳
+            </button>
+          )}
           <div className="zoom">
             <button onClick={() => changeZoom(-1)} disabled={zoom === ZOOM_LEVELS[0]} aria-label="縮小">−</button>
             <span>{Math.round(zoom * 100)}%</span>
@@ -545,6 +565,31 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
         )}
       </div>
 
+      {showTr && song && (
+        <Modal title={`日本語訳(${song.title})`} onClose={() => setShowTr(false)}>
+          {song.translationStatus === 'done' && song.translation ? (
+            <>
+              <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>1コーラス分の訳です。</p>
+              <div style={{ whiteSpace: 'pre-wrap', lineHeight: 2, fontSize: 18 }}>{song.translation}</div>
+            </>
+          ) : song.translationStatus === 'done' || song.marksLang === 'ja' ? (
+            <p>日本語の歌詞のため、訳はありません。</p>
+          ) : trBusy || analyzing ? (
+            <p>日本語訳を作成しています…(10〜20秒ほど)</p>
+          ) : !online ? (
+            <p>日本語訳の作成にはネット接続が必要です。ネットにつないでから、もう一度ボタンを押してください。</p>
+          ) : (
+            <>
+              {trError && <p className="error-text">作成できませんでした。({trError})</p>}
+              <button className="btn primary" onClick={openTranslation}>日本語訳を作る</button>
+            </>
+          )}
+          <div className="modal-actions" style={{ marginTop: 20 }}>
+            <button className="btn" onClick={() => setShowTr(false)}>閉じる</button>
+          </div>
+        </Modal>
+      )}
+
       {showPrev && prevLesson && (
         <PrevReviewModal
           prevLesson={prevLesson}
@@ -577,7 +622,7 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
             quiet(
               updateDoc(
                 doc(db, 'students', sid, 'songs', song.id),
-                changed ? { title, lyrics, marks: [], marksStatus: 'pending' } : { title }
+                changed ? { title, lyrics, marks: [], marksStatus: 'pending', translation: '', translationStatus: 'pending' } : { title }
               )
             );
             if (changed) marksTried.current = '';
