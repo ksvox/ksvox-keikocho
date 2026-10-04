@@ -6,6 +6,7 @@ import {
 import InkSheet, { DEFAULT_LAYOUT, PEN_COLORS, ZOOM_LEVELS } from './InkSheet';
 import Modal from './Modal';
 import Recorder from './Recorder';
+import { SendReviewButton, SendReviewModal } from './SendReview';
 import { MarkLegend, MarksPanel, PrevReviewModal, SummaryEditor, SummaryView } from './ReviewParts';
 import { useCollectionData, useDocData, useOnline } from '../lib/useFirestore';
 import { formatDate, newId, quiet } from '../lib/utils';
@@ -76,6 +77,7 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
   const [trBusy, setTrBusy] = useState(false);
   const [trError, setTrError] = useState('');
   const [editingSummary, setEditingSummary] = useState(false);
+  const [sendingReview, setSendingReview] = useState(false);
   const [pendingRecs, setPendingRecs] = useState([]);
   const [summarizing, setSummarizing] = useState(false);
   const [zoom, setZoom] = useState(() => {
@@ -539,6 +541,7 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
                       </button>
                     </div>
                     <SummaryView summary={lesson.summary} />
+                    <SendReviewButton student={student} lesson={lesson} online={online} onOpen={() => setSendingReview(true)} />
                   </div>
                 )}
                 <p className="pad-title" style={{ marginTop: 16 }}>今日の気付き(手書き)</p>
@@ -600,6 +603,10 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
             setShowPrev(false);
           }}
         />
+      )}
+
+      {sendingReview && (
+        <SendReviewModal db={db} student={student} lesson={lesson} lessonRef={lessonRef} onClose={() => setSendingReview(false)} />
       )}
 
       {editingSummary && (

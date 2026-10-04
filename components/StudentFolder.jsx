@@ -3,6 +3,7 @@ import { collection, doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { ArrowLeft, Bookmark, ChevronDown, ChevronRight, FileText, Play } from 'lucide-react';
 import { useCollectionData } from '../lib/useFirestore';
 import { formatDate, quiet, routineSummary, todayStr } from '../lib/utils';
+import MonteiLink from './MonteiLink';
 
 export default function StudentFolder({ db, student, settings, onBack, onOpenLesson, onNewSong, onViewSong }) {
   const [showPast, setShowPast] = useState(false);
@@ -70,6 +71,7 @@ export default function StudentFolder({ db, student, settings, onBack, onOpenLes
       </header>
 
       <div className="page-body">
+        <MonteiLink db={db} student={student} />
         <div className="card current-card">
           {currentSong ? (
             <>
