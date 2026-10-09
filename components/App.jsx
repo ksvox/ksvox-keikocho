@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { loadFirebaseConfig, initFirebase } from '../lib/firebase';
-import { DEFAULT_SETTINGS } from '../lib/defaults';
+import { DEFAULT_SETTINGS, ENGLISH_CATEGORY } from '../lib/defaults';
 import { quiet } from '../lib/utils';
 import { processPendingAudio } from '../lib/ai';
 import { useCollectionData, useOnline } from '../lib/useFirestore';
@@ -66,9 +66,19 @@ function Main({ db, auth, user }) {
       { includeMetadataChanges: true },
       (snap) => {
         if (snap.exists()) {
-          setSettings({ ...DEFAULT_SETTINGS, ...snap.data() });
+          const data = snap.data();
+          // ルーティン「英語」を1度だけ追加(ブレスの次)。設定画面で消した後は戻さない
+          if (!data.englishAdded && !snap.metadata.fromCache) {
+            const cats = [...(data.routineCategories || DEFAULT_SETTINGS.routineCategories)];
+            if (!cats.some((c) => c.id === 'c4' || c.name === '英語')) {
+              const bi = cats.findIndex((c) => c.name === 'ブレス');
+              cats.splice(bi >= 0 ? bi + 1 : cats.length, 0, ENGLISH_CATEGORY);
+            }
+            quiet(setDoc(ref, { routineCategories: cats, englishAdded: true }, { merge: true }));
+          }
+          setSettings({ ...DEFAULT_SETTINGS, ...data });
         } else if (!snap.metadata.fromCache) {
-          quiet(setDoc(ref, DEFAULT_SETTINGS));
+          quiet(setDoc(ref, { ...DEFAULT_SETTINGS, englishAdded: true }));
           setSettings(DEFAULT_SETTINGS);
         } else {
           setSettings((cur) => cur || DEFAULT_SETTINGS);

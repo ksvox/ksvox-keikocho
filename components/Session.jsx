@@ -278,6 +278,21 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
   const showFinishButton = song && (lesson.finishedSong || !song.finishedAt);
   const inkReady = !songId || (myInk !== null && inkDocs !== undefined);
 
+  // この曲の何回目のお稽古か(同じ曲の記録を日付順に数える)
+  const lessonNo = (() => {
+    if (!song || !lessons || !lesson) return '?';
+    const list = lessons.filter((l) => l.songId === song.id)
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)) || ((a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)));
+    const i = list.findIndex((l) => l.id === lessonId);
+    return i < 0 ? '?' : i + 1;
+  })();
+  const editPlanned = () => {
+    const v = window.prompt(`「${song.title}」を何回で仕上げますか?(数字で入力)`, song.plannedCount ? String(song.plannedCount) : '');
+    if (v === null) return;
+    const n = Math.round(Number(String(v).replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))));
+    quiet(updateDoc(doc(db, 'students', sid, 'songs', song.id), { plannedCount: n > 0 ? n : null }));
+  };
+
   return (
     <div className="session">
       <header className="session-head">
@@ -305,6 +320,11 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
         {song && (
           <button className="icon-btn" onClick={() => setEditingLyrics(true)} aria-label="歌詞を修正">
             <Pencil size={20} />
+          </button>
+        )}
+        {song && (
+          <button className="btn outline" onClick={editPlanned} aria-label="仕上げまでの回数を変更" style={{ whiteSpace: 'nowrap' }}>
+            {lessonNo}/{song.plannedCount ? `全${song.plannedCount}回` : '全?回'}
           </button>
         )}
         {showFinishButton && (

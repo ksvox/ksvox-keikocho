@@ -9,6 +9,7 @@ export default function NewSong({ db, student, lessonId, onBack, onDone }) {
   const [step, setStep] = useState('choose'); // choose | images | text
   const [title, setTitle] = useState('');
   const [lyrics, setLyrics] = useState('');
+  const [planned, setPlanned] = useState('');
   const [images, setImages] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -60,6 +61,7 @@ export default function NewSong({ db, student, lessonId, onBack, onDone }) {
       setDoc(songRef, {
         title: t,
         lyrics: cleanLyrics,
+        plannedCount: Number(planned) > 0 ? Math.round(Number(planned)) : null,
         startedAt: today,
         finishedAt: null,
         layout: DEFAULT_LAYOUT,
@@ -274,6 +276,13 @@ export default function NewSong({ db, student, lessonId, onBack, onDone }) {
             <label className="field">
               <span>曲名</span>
               <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="曲名を入力" style={{ fontSize: 22 }} />
+            </label>
+            <label className="field">
+              <span>回数(この曲を何回で仕上げるか・あとで変更できます)</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="number" inputMode="numeric" min="1" max="30" value={planned} onChange={(e) => setPlanned(e.target.value)} placeholder="例: 6" style={{ fontSize: 22, width: 120 }} />
+                <span style={{ fontSize: 18 }}>回</span>
+              </span>
             </label>
             <label className="field">
               <span>{images.length ? '読み取った歌詞(確認・修正)' : '歌詞(貼り付けてから、改行や誤字を整えてください)'}</span>
