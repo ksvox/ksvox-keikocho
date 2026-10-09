@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { layoutMarks, markStyle } from '../lib/marks';
+import { markSegments, comboStyle } from '../lib/marks';
 
 // 歌詞シートの論理的な横幅。どのiPadでも同じ位置で折り返すよう、
 // この幅で組んだものを画面幅に合わせて拡大縮小する。
@@ -269,30 +269,16 @@ export default function InkSheet({
     };
   }, [readOnly]);
 
-  // 注意マーク付きの歌詞(下線と背景色だけなので、文字の位置は変わらない)
+  // 注意マーク付きの歌詞(色・下線・背景だけなので、文字の位置は変わらない)
   const rendered = useMemo(() => {
     if (!showMarks || !marks || !marks.length || !text) return text;
-    const { lines, perLine } = layoutMarks(text, marks);
-    return lines.map((line, li) => {
-      const parts = [];
-      let pos = 0;
-      perLine[li].forEach((r) => {
-        if (r.start > pos) parts.push(line.slice(pos, r.start));
-        parts.push(
-          <span key={`${li}-${r.start}`} style={markStyle(r.type)}>
-            {line.slice(r.start, r.end)}
-          </span>
-        );
-        pos = r.end;
-      });
-      if (pos < line.length) parts.push(line.slice(pos));
-      return (
-        <span key={li}>
-          {parts}
-          {li < lines.length - 1 ? '\n' : ''}
-        </span>
-      );
-    });
+    const segLines = markSegments(text, marks);
+    return segLines.map((segs, li) => (
+      <span key={li}>
+        {segs.map((g, k) => (g.key ? <span key={k} style={comboStyle(g.key)}>{g.text}</span> : g.text))}
+        {li < segLines.length - 1 ? '\n' : ''}
+      </span>
+    ));
   }, [text, marks, showMarks]);
 
   const cssW = SHEET_W;

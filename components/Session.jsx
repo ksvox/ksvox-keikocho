@@ -10,7 +10,8 @@ import { SendReviewButton, SendReviewModal } from './SendReview';
 import { MarkLegend, MarksPanel, PrevReviewModal, SummaryEditor, SummaryView } from './ReviewParts';
 import { useCollectionData, useDocData, useOnline } from '../lib/useFirestore';
 import { formatDate, newId, quiet } from '../lib/utils';
-import { processPendingAudio, runMarksAnalysis, runTranslation } from '../lib/ai';
+import { processPendingAudio, runTranslation } from '../lib/ai';
+import { runDictMarks, MARKS_VERSION } from '../lib/dictMarks';
 import { addPending, listPending } from '../lib/pendingAudio';
 
 const SAVE_DELAY = 800;
@@ -150,15 +151,15 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
     );
   }, [lessons, lesson, lessonId]);
 
-  // 注意マーク: まだ分析していない曲は、ネットにつながっていれば自動で分析する
+  // 注意マーク(英語曲のみ・発音辞書方式): まだの曲・AI時代の印の曲は、開いた時に自動で付け直す
   const marksTried = useRef('');
   useEffect(() => {
-    if (!song || !online) return;
-    if (song.marksStatus === 'done' || song.marksStatus === 'error') return;
-    if (marksTried.current === song.id) return;
-    marksTried.current = song.id;
+    if (!song) return;
+    if (song.marksVersion === MARKS_VERSION && song.marksStatus === 'done') return;
+    if (marksTried.current === song.id + (online ? ':on' : '')) return;
+    marksTried.current = song.id + (online ? ':on' : '');
     setAnalyzing(true);
-    runMarksAnalysis(db, sid, song.id, song.lyrics || '').finally(() => setAnalyzing(false));
+    runDictMarks(db, sid, song.id, song.lyrics || '').finally(() => setAnalyzing(false));
   }, [song, online, db, sid]);
 
   // 日本語訳を開く。まだ訳がない曲は、ネットにつながっていればその場で作る
@@ -175,8 +176,9 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
 
   const retryMarks = () => {
     if (!song) return;
+    if (!window.confirm('注意マークを付け直しますか?(手で消した印も元に戻ります)')) return;
     setAnalyzing(true);
-    runMarksAnalysis(db, sid, song.id, song.lyrics || '').finally(() => setAnalyzing(false));
+    runDictMarks(db, sid, song.id, song.lyrics || '').finally(() => setAnalyzing(false));
   };
 
   // この日の、まとめ待ちの録音
@@ -431,7 +433,7 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
               <MarkLegend marks={song.marks} />
             ) : (
               <p className="review-note" style={{ margin: '0 4px 10px' }}>
-                {analyzing || online ? '注意マークを分析しています…' : 'ネットにつながった時に、自動で注意マークを分析します。'}
+                {analyzing || online ? '注意マークを付けています…' : 'ネットにつながった時に、自動で注意マークを付けます。'}
               </p>
             )
           )}
@@ -649,7 +651,7 @@ export default function Session({ db, student, settings, lessonId, onBack, onNew
             quiet(
               updateDoc(
                 doc(db, 'students', sid, 'songs', song.id),
-                changed ? { title, lyrics, marks: [], marksStatus: 'pending', translation: '', translationStatus: 'pending' } : { title }
+                changed ? { title, lyrics, marks: [], marksStatus: 'pending', marksVersion: null, translation: '', translationStatus: 'pending' } : { title }
               )
             );
             if (changed) marksTried.current = '';

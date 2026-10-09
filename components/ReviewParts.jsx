@@ -19,7 +19,7 @@ export function MarkLegend({ marks }) {
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 14, color: 'var(--sub)', margin: '0 4px 10px' }}>
       {types.map((t) => (
         <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ ...markStyle(t), color: 'var(--ink)', padding: '0 2px' }}>abc</span>
+          <span style={{ color: 'var(--ink)', padding: '0 2px', ...markStyle(t) }}>abc</span>
           {MARK_TYPES[t].label}
         </span>
       ))}
@@ -35,17 +35,18 @@ export function MarksPanel({ song, online, analyzing, onRetry, onDelete }) {
   if (!song) return <p className="muted">課題曲がありません。</p>;
 
   let statusNote = null;
-  if (analyzing) statusNote = '注意マークを分析しています…(10〜20秒ほど)';
+  if (analyzing) statusNote = '注意マークを付けています…';
   else if (status !== 'done' && status !== 'error') {
-    statusNote = online ? '注意マークの分析を準備しています…' : 'ネットにつながった時に、自動で注意マークを分析します。';
+    statusNote = online ? '注意マークの準備をしています…' : 'ネットにつながった時に、自動で注意マークを付けます。';
   } else if (status === 'error') statusNote = `分析できませんでした。(${song.marksError || '原因不明'})`;
 
   return (
     <div>
       {statusNote && <p className="review-note">{statusNote}</p>}
-      {status === 'done' && marks.length === 0 && <p className="review-note">注意マークはありませんでした。</p>}
+      {status === 'done' && marks.length === 0 && <p className="review-note">{song.marksLang === 'ja' ? '注意マークは英語曲のみです。' : '注意マークはありませんでした。'}</p>}
+      {marks.length > 0 && <p className="review-note">アクセント(赤)と内容語(太字)は歌詞シートで確認できます。下の一覧はリンキング・難しい単語・熟語です。</p>}
       {marks.length > 0 && <MarkLegend marks={marks} />}
-      {marks.map((m, i) => (
+      {marks.map((m, i) => (MARK_TYPES[m.type]?.list === false ? null : (
         <div
           key={`${m.text}-${i}`}
           style={{
@@ -66,10 +67,10 @@ export function MarksPanel({ song, online, analyzing, onRetry, onDelete }) {
             <X size={18} />
           </button>
         </div>
-      ))}
+      )))}
       {!analyzing && online && (status === 'done' || status === 'error') && (
         <button className="link-btn" onClick={onRetry}>
-          もう一度分析する
+          注意マークを付け直す
         </button>
       )}
     </div>
